@@ -1,0 +1,6 @@
+myenv
+extracted
+reports
+.env
+__pycache__
+*.pyc

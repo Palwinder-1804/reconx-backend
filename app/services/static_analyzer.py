@@ -53,7 +53,9 @@ def analyze_file(
 
         ) as file:
 
-            content = file.read()
+            lines = file.readlines()
+
+        content = "".join(lines)
 
         # ==========================
         # Skip Huge Files
@@ -62,8 +64,6 @@ def analyze_file(
         if len(content) > 2_000_000:
 
             return findings
-
-        lower_content = content.lower()
 
         # ==========================
         # Secret Detection
@@ -74,85 +74,64 @@ def analyze_file(
             COMPILED_SECRET_PATTERNS.items()
         ):
 
-            matches = compiled_pattern.findall(
-                content
-            )
+            for i, line in enumerate(lines):
+                matches = compiled_pattern.findall(
+                    line
+                )
 
-            if matches:
+                if matches:
 
-                findings.append({
+                    findings.append({
 
-                    "title":
-                        "Hardcoded Secret",
+                        "title":
+                            "Hardcoded Secret",
 
-                    "severity":
-                        "HIGH",
+                        "severity":
+                            "HIGH",
 
-                    "description":
-                        f"{name} detected",
+                        "description":
+                            f"{name} detected",
 
-                    "file":
-                        file_path
-                })
+                        "file":
+                            file_path,
+                        
+                        "line": i + 1,
+                        "snippet": line.strip()
+                    })
 
         # ==========================
         # HTTP URL Detection
         # ==========================
 
-        http_matches = []
-        if "http://" in lower_content:
-            http_matches = (
-                COMPILED_HTTP_PATTERN.findall(
-                    content
-                )
-            )
-
-        if http_matches:
-
-            findings.append({
-
-                "title":
-                    "Insecure HTTP URL",
-
-                "severity":
-                    "HIGH",
-
-                "description":
-                    "HTTP communication detected",
-
-                "file":
-                    file_path
-            })
+        for i, line in enumerate(lines):
+            if "http://" in line.lower():
+                matches = COMPILED_HTTP_PATTERN.findall(line)
+                if matches:
+                    findings.append({
+                        "title": "Insecure HTTP URL",
+                        "severity": "HIGH",
+                        "description": "HTTP communication detected",
+                        "file": file_path,
+                        "line": i + 1,
+                        "snippet": line.strip()
+                    })
 
         # ==========================
         # Firebase Detection
         # ==========================
 
-        firebase_matches = []
-        if "firebaseio.com" in lower_content:
-            firebase_matches = (
-
-                COMPILED_FIREBASE_PATTERN.findall(
-                    content
-                )
-            )
-
-        if firebase_matches:
-
-            findings.append({
-
-                "title":
-                    "Firebase URL Found",
-
-                "severity":
-                    "MEDIUM",
-
-                "description":
-                    "Firebase endpoint detected",
-
-                "file":
-                    file_path
-            })
+        for i, line in enumerate(lines):
+            if "firebaseio.com" in line.lower():
+                matches = COMPILED_FIREBASE_PATTERN.findall(line)
+                if matches:
+                    findings.append({
+                        "title": "Firebase URL Found",
+                        "severity": "MEDIUM",
+                        "description": "Firebase endpoint detected",
+                        "file": file_path,
+                        "line": i + 1,
+                        "snippet": line.strip()
+                    })
 
         # ==========================
         # Weak Crypto Detection
@@ -161,25 +140,18 @@ def analyze_file(
         for crypto in (
             WEAK_CRYPTO_PATTERNS
         ):
-
-            if crypto in content:
-
-                findings.append({
-
-                    "title":
-                        "Weak Cryptography",
-
-                    "severity":
-                        "HIGH",
-
-                    "description":
-                        f"{crypto} detected",
-
-                    "file":
-                        file_path
-                })
+            for i, line in enumerate(lines):
+                if crypto in line:
+                    findings.append({
+                        "title": "Weak Cryptography",
+                        "severity": "HIGH",
+                        "description": f"{crypto} detected",
+                        "file": file_path,
+                        "line": i + 1,
+                        "snippet": line.strip()
+                    })
 
     except Exception:
         pass
 
-    return findings
+    return findings

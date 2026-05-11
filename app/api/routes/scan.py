@@ -16,7 +16,8 @@ from app.services.manifest_parser import (
 )
 
 from app.services.permission_scanner import (
-    scan_permissions
+    scan_permissions,
+    check_unnecessary_permissions
 )
 
 from app.services.vulnerability_engine import (
@@ -29,6 +30,14 @@ from app.services.code_scanner import (
 
 from app.services.static_analyzer import (
     analyze_file
+)
+
+from app.services.file_scanner import (
+    scan_files_for_vulnerabilities
+)
+
+from app.services.playstore_verifier import (
+    verify_playstore_status
 )
 
 import os
@@ -102,6 +111,17 @@ async def start_scan(
         )
 
     # ==========================
+    # File Scanning (Junk/Vulnerable Files)
+    # ==========================
+    
+    findings = []
+    
+    file_findings = scan_files_for_vulnerabilities(
+        extraction_result["apktool_output"]
+    )
+    findings.extend(file_findings)
+
+    # ==========================
     # Manifest Analysis
     # ==========================
 
@@ -118,22 +138,27 @@ async def start_scan(
         manifest_path
     )
 
-    findings = []
+    permission_names = []
+    playstore_status = {"is_playstore_verified": False, "verification_details": "Manifest not found"}
 
     if manifest_root:
 
-        findings.extend(
-
-            scan_permissions(
-                manifest_root
-            )
+        perm_findings, permission_names = scan_permissions(
+            manifest_root
         )
+        findings.extend(perm_findings)
 
         findings.extend(
 
             analyze_manifest_security(
                 manifest_root
             )
+        )
+        
+        # Play Store Verification
+        playstore_status = verify_playstore_status(
+            manifest_root,
+            extraction_result["apktool_output"]
         )
 
     # ==========================
@@ -169,6 +194,19 @@ async def start_scan(
             findings.extend(
                 file_findings
             )
+            
+    # Collect code content for unnecessary permission check
+    try:
+        sample_content = ""
+        for i, f_path in enumerate(source_files):
+            if i > 100: break 
+            with open(f_path, 'r', encoding='utf-8', errors='ignore') as f:
+                sample_content += f.read()
+        
+        unnecessary_perms = check_unnecessary_permissions(permission_names, sample_content)
+        findings.extend(unnecessary_perms)
+    except:
+        pass
 
     # ==========================
     # Remove Duplicate Findings
@@ -186,7 +224,9 @@ async def start_scan(
 
             finding["description"],
 
-            finding.get("file", "")
+            finding.get("file", ""),
+            
+            finding.get("line", 0)
         )
 
         if key not in seen:
@@ -251,7 +291,10 @@ async def start_scan(
                     summary,
 
                 "vulnerabilities":
-                    findings
+                    findings,
+                
+                "playstore_status":
+                    playstore_status
             }
         }
     )
@@ -277,5 +320,8 @@ async def start_scan(
             len(findings),
 
         "vulnerabilities":
-            findings
+            findings,
+        
+        "playstore_status":
+            playstore_status
     }
